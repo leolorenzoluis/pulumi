@@ -919,7 +919,7 @@ func (pt *programTester) copyTestToTemporaryDirectory() (string, string, error) 
 	// For most projects, we will copy to a temporary directory.  For Go projects, however, we must not perturb
 	// the source layout, due to GOPATH and vendoring.  So, skip it for Go.
 	var tmpdir, projdir string
-	if projinfo.Proj.Runtime == "go" {
+	if projinfo.Proj.RuntimeInfo.Name() == "go" {
 		projdir = projinfo.Root
 	} else {
 		stackName := string(pt.opts.GetStackName())
@@ -961,7 +961,7 @@ func (pt *programTester) getProjinfo(projectDir string) (*engine.Projinfo, error
 // prepareProject runs setup necessary to get the project ready for `pulumi` commands.
 func (pt *programTester) prepareProject(projinfo *engine.Projinfo) error {
 	// Based on the language, invoke the right routine to prepare the target directory.
-	switch rt := projinfo.Proj.Runtime; rt {
+	switch rt := projinfo.Proj.RuntimeInfo.Name(); rt {
 	case "nodejs":
 		return pt.prepareNodeJSProject(projinfo)
 	case "python":
@@ -1011,8 +1011,19 @@ func (pt *programTester) prepareNodeJSProject(projinfo *engine.Projinfo) error {
 		}
 	}
 
-	// And finally compile it using whatever build steps are in the package.json file.
-	return pt.runYarnCommand("yarn-build", []string{"run", "build"}, cwd)
+	isTypeScriptProject := false
+	if projinfo.Proj.RuntimeInfo.Options() != nil {
+		has, val := projinfo.Proj.RuntimeInfo.Options()["typescript"]
+		isTypeScriptProject = has && val
+	}
+
+	// This assumes that when we have a native typescript test project, we'll never have any other build steps, but
+	// that's a safe assumption for us to make.
+	if !isTypeScriptProject {
+		return pt.runYarnCommand("yarn-build", []string{"run", "build"}, cwd)
+	}
+
+	return nil
 }
 
 // preparePythonProject runs setup necessary to get a Python project ready for `pulumi` commands.
